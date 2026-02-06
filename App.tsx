@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Login from "./pages/Login";
+import Home from "./pages/Home";
 import Create from "./pages/Create";
 import Payments from "./pages/Payments";
 import Result from "./pages/Result";
@@ -7,7 +8,7 @@ import Result from "./pages/Result";
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 
-type View = "login" | "create" | "payments" | "result";
+type View = "login" | "home" | "create" | "payments" | "result";
 
 const auth = getAuth();
 const db = getFirestore();
@@ -52,7 +53,7 @@ const App: React.FC = () => {
 
         setCurrentUser(userObj);
         localStorage.setItem("prophotoia_user", JSON.stringify(userObj));
-        setView("create");
+        setView("home"); // ✅ agora abre na HOME
         return;
       }
 
@@ -94,7 +95,13 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50">
       <header className="w-full bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
+          <div
+            className="cursor-pointer"
+            onClick={() => {
+              if (currentUser?.isLoggedIn) setView("home");
+              else setView("login");
+            }}
+          >
             <div className="font-black text-slate-900">ProPhoto IA</div>
             <div className="text-xs text-slate-500">
               Créditos: {Number(currentUser?.credits ?? 0)}
@@ -105,10 +112,18 @@ const App: React.FC = () => {
             <div className="flex gap-2">
               <button
                 className="px-3 py-2 rounded-xl text-sm font-bold bg-slate-100"
+                onClick={() => setView("home")}
+              >
+                Início
+              </button>
+
+              <button
+                className="px-3 py-2 rounded-xl text-sm font-bold bg-slate-100"
                 onClick={() => setView("payments")}
               >
                 Planos
               </button>
+
               <button
                 className="px-3 py-2 rounded-xl text-sm font-bold bg-slate-900 text-white"
                 onClick={handleLogout}
@@ -122,13 +137,20 @@ const App: React.FC = () => {
 
       <main className="max-w-5xl mx-auto px-4 py-6">
         {view === "login" && (
-  <Login
-    onLogin={() => {
-      setView("create");
-    }}
-  />
-)}
+          <Login
+            onLogin={() => {
+              setView("home"); // ✅ depois do login vai pra HOME
+            }}
+          />
+        )}
 
+        {view === "home" && currentUser?.isLoggedIn && (
+          <Home
+            user={currentUser}
+            onStart={() => setView("create")}
+            onPlans={() => setView("payments")}
+          />
+        )}
 
         {view === "create" && currentUser?.isLoggedIn && (
           <Create
