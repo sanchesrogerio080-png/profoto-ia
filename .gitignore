@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.local
+replicate-api/secrets/
+**/secrets/
+firebase-key*.json
+.env
+.env.local
+replicate-api/secrets/
+**/secrets/
+firebase*service-account*.json
+firebase-key*.json

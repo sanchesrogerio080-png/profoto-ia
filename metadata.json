@@ -1,0 +1,7 @@
+{
+  "name": "ProPhoto IA",
+  "description": "Professional AI product photography studio. Upload your product and generate high-quality lifestyle shots.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
