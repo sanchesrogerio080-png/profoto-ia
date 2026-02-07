@@ -163,9 +163,23 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
   const fileInputGalleryRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
 
-  const localGenerateUrl =
-    ((import.meta as any).env?.VITE_LOCAL_GENERATE_URL as string | undefined)?.trim() ||
-    "http://localhost:5050";
+  /**
+   * ✅ CORREÇÃO DEFINITIVA:
+   * - Em PRODUÇÃO (profotoia.com.br / Vercel) NUNCA usar localhost.
+   * - Só usa Cloud Run via VITE_REPLICATE_API_BASE_URL.
+   * - Localhost só é permitido quando o site estiver rodando em "localhost" no navegador.
+   */
+  const cloudRunBase =
+    ((import.meta as any).env?.VITE_REPLICATE_API_BASE_URL as string | undefined)?.trim() || "";
+
+  const localBase =
+    ((import.meta as any).env?.VITE_LOCAL_GENERATE_URL as string | undefined)?.trim() || "";
+
+  const isBrowserLocalhost =
+    typeof window !== "undefined" && window.location && window.location.hostname === "localhost";
+
+  const apiBaseUrlRaw = cloudRunBase || (isBrowserLocalhost ? localBase : "");
+  const apiBaseUrl = apiBaseUrlRaw.replace(/\/+$/, ""); // remove "/" no final
 
   const requiredCredits = useMemo(() => {
     return quality === "4k" ? 4 : 1;
@@ -207,6 +221,14 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
 
     if (!user?.uid) {
       setError("Você precisa estar logado para gerar.");
+      return;
+    }
+
+    // ✅ se não tiver base URL configurada, para aqui (evita cair em localhost)
+    if (!apiBaseUrl) {
+      setError(
+        "API não configurada. Defina VITE_REPLICATE_API_BASE_URL no Vercel com a URL do Cloud Run (ex: https://replicate-api-xxxxx.southamerica-east1.run.app)."
+      );
       return;
     }
 
@@ -268,7 +290,9 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
       const userNotes = (userInstructions || "").trim();
 
       // ✅ formato (simples)
-      const formatHint = `Match the selected format: ${selectedFormat?.name || "selected format"} aspect ratio and composition.`;
+      const formatHint = `Match the selected format: ${
+        selectedFormat?.name || "selected format"
+      } aspect ratio and composition.`;
 
       // ✅ PROMPT FINAL (SIMPLES, DIRETO)
       const fullPrompt = `
@@ -294,8 +318,8 @@ QUALITY: ${qualityHint}
 USER NOTES: ${userNotes ? userNotes : "(none)"}
 `.trim();
 
-      // ✅ SEU FETCH (mantido)
-      const resp = await fetch(`${localGenerateUrl}/generate-image`, {
+      // ✅ agora chama o Cloud Run (apiBaseUrl) e NÃO localhost em produção
+      const resp = await fetch(`${apiBaseUrl}/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -518,12 +542,24 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                       onChange={(e) => setProductType(e.target.value)}
                       className="w-full rounded-2xl bg-white/5 border border-white/10 text-white px-4 py-3 outline-none"
                     >
-                      <option value="" className="bg-[#0b1224]">Selecione o tipo</option>
-                      <option value="acessorio" className="bg-[#0b1224]">Acessório</option>
-                      <option value="roupa" className="bg-[#0b1224]">Roupa</option>
-                      <option value="calcado" className="bg-[#0b1224]">Calçado</option>
-                      <option value="bone" className="bg-[#0b1224]">Boné/Chapéu</option>
-                      <option value="outro" className="bg-[#0b1224]">Outro</option>
+                      <option value="" className="bg-[#0b1224]">
+                        Selecione o tipo
+                      </option>
+                      <option value="acessorio" className="bg-[#0b1224]">
+                        Acessório
+                      </option>
+                      <option value="roupa" className="bg-[#0b1224]">
+                        Roupa
+                      </option>
+                      <option value="calcado" className="bg-[#0b1224]">
+                        Calçado
+                      </option>
+                      <option value="bone" className="bg-[#0b1224]">
+                        Boné/Chapéu
+                      </option>
+                      <option value="outro" className="bg-[#0b1224]">
+                        Outro
+                      </option>
                     </select>
                   </div>
 
@@ -592,7 +628,11 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                             }`}
                           >
                             <div>
-                              <div className={`font-bold ${active ? "text-sky-200" : "text-white/85"}`}>
+                              <div
+                                className={`font-bold ${
+                                  active ? "text-sky-200" : "text-white/85"
+                                }`}
+                              >
                                 {fmt.name}
                               </div>
                               <div className="text-white/40 text-xs mt-1">
@@ -713,7 +753,11 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                             : "bg-white/5 border-white/10"
                         }`}
                       >
-                        <div className={`font-black ${quality === "hd" ? "text-sky-200" : "text-white/85"}`}>
+                        <div
+                          className={`font-black ${
+                            quality === "hd" ? "text-sky-200" : "text-white/85"
+                          }`}
+                        >
                           HD
                         </div>
                         <div className="text-white/45 text-xs mt-1">1 crédito</div>
@@ -727,7 +771,11 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                             : "bg-white/5 border-white/10"
                         }`}
                       >
-                        <div className={`font-black ${quality === "4k" ? "text-sky-200" : "text-white/85"}`}>
+                        <div
+                          className={`font-black ${
+                            quality === "4k" ? "text-sky-200" : "text-white/85"
+                          }`}
+                        >
                           4K
                         </div>
                         <div className="text-white/45 text-xs mt-1">4 créditos</div>
