@@ -1,31 +1,91 @@
-// ✅ PROMPT FINAL (curto, sem conflito)
-const userNotes = (userInstructions || "").trim();
+export interface Scenario {
+  id: string;
+  name: string;
+  prompt: string;
+}
 
-const modeLine =
-  useMode === "product_only"
-    ? "No person visible."
-    : useMode === "holding"
-    ? "Person holding the product in hands at chest level."
-    : "Person wearing/using the product naturally.";
+export interface Character {
+  id: string;
+  name: string;
+  prompt: string;
+}
 
-const scenarioLine = selectedScenario?.prompt?.trim() || "";
-const characterLine =
-  useMode === "product_only"
-    ? ""
-    : (selectedCharacter?.prompt || "").trim();
+export interface Format {
+  id: string;
+  name: string;
+  aspectRatio: "1:1" | "3:4" | "9:16" | "16:9";
+}
 
-const fullPrompt = `
-${scenarioLine}
+/**
+ * ✅ PROMPTS CURTOS (pra não dar conflito e ficar consistente)
+ * - cenário: só o ambiente
+ * - personagem: só quem é
+ * - o “prompt final” é montado no Create.tsx
+ */
 
-${modeLine}
-${characterLine}
+export const SCENARIOS: Scenario[] = [
+  {
+    id: "foto-produto",
+    name: "Foto do produto (fundo branco)",
+    prompt: "Clean studio product photo on pure white seamless background. Soft professional lighting. Sharp focus.",
+  },
+  {
+    id: "fundo-original",
+    name: "Manter fundo original",
+    prompt: "Keep the original real background from the input image. Enhance lighting and sharpness realistically.",
+  },
+  {
+    id: "estudio-fotografico",
+    name: "Estúdio fotográfico profissional",
+    prompt: "Professional photography studio environment with softboxes. High-end commercial look. Realistic lighting.",
+  },
+  {
+    id: "aeroporto",
+    name: "Aeroporto moderno",
+    prompt: "Modern airport environment. Natural cinematic lighting. Realistic perspective. Sharp focus.",
+  },
+  {
+    id: "sala-chique",
+    name: "Sala bonita e chique",
+    prompt: "Elegant luxury living room. Refined decor. Soft premium lighting. Realistic textures.",
+  },
+  {
+    id: "shopping",
+    name: "Shopping moderno",
+    prompt: "Contemporary shopping mall environment. Natural reflections. Realistic perspective. Sharp focus.",
+  },
+  {
+    id: "praia",
+    name: "Praia paradisíaca realista",
+    prompt: "Tropical beach environment. Natural sunlight. Realistic sand and ocean. Sharp focus.",
+  },
+  {
+    id: "montanhas",
+    name: "Montanhas naturais",
+    prompt: "Natural mountain landscape. Atmospheric realistic lighting. Sharp details. Cinematic realism.",
+  },
+];
 
-Product must remain 100% identical to the original uploaded image.
-Do not change design, colors, logo, text, materials, proportions.
+export const CHARACTERS: Character[] = [
+  { id: "none", name: "Nenhum / Aleatório", prompt: "Real person, natural look, friendly smile, face visible and sharp." },
+  { id: "mulher-adulta", name: "Mulher Adulta", prompt: "Real adult woman, natural look, friendly smile, face visible and sharp." },
+  { id: "mulher-plus", name: "Mulher Plus Size", prompt: "Real plus-size woman, natural look, friendly smile, face visible and sharp." },
+  { id: "homem-adulto", name: "Homem Adulto", prompt: "Real adult man, natural look, friendly smile, face visible and sharp." },
+  { id: "homem-plus", name: "Homem Plus Size", prompt: "Real plus-size man, natural look, friendly smile, face visible and sharp." },
+  { id: "mulher-jovem", name: "Mulher Jovem", prompt: "Real young woman, natural look, friendly smile, face visible and sharp." },
+  { id: "homem-jovem", name: "Homem Jovem", prompt: "Real young man, natural look, friendly smile, face visible and sharp." },
+  { id: "adolescente-homem", name: "Adolescente Homem", prompt: "Real teenage boy, gentle smile, face visible and sharp." },
+  { id: "adolescente-mulher", name: "Adolescente Mulher", prompt: "Real teenage girl, gentle smile, face visible and sharp." },
+  { id: "crianca-menina", name: "Criança Menina", prompt: "Real child girl, gentle smile, face visible and sharp." },
+  { id: "crianca-menino", name: "Criança Menino", prompt: "Real child boy, gentle smile, face visible and sharp." },
+  { id: "bebe-menina", name: "Bebê Menina", prompt: "Real baby girl, happy gentle expression, face visible and sharp." },
+  { id: "bebe-menino", name: "Bebê Menino", prompt: "Real baby boy, happy gentle expression, face visible and sharp." },
+];
 
-Professional commercial photo. Clean lighting. Sharp focus. True colors.
-Aspect ratio: ${selectedFormat?.aspectRatio || "1:1"}.
-Quality: ${quality === "4k" ? "4K ultra realistic" : "HD professional"}.
-
-${userNotes ? `User notes: ${userNotes}` : ""}
-`.trim();
+export const FORMATS: Format[] = [
+  { id: "normal", name: "Tamanho normal (automático)", aspectRatio: "1:1" },
+  { id: "1:1", name: "1:1 (Quadrado)", aspectRatio: "1:1" },
+  { id: "4:5", name: "4:5 (Retrato)", aspectRatio: "3:4" },
+  { id: "9:16", name: "9:16 (Stories / Reels / TikTok)", aspectRatio: "9:16" },
+  { id: "16:9", name: "16:9 (Paisagem / YouTube)", aspectRatio: "16:9" },
+];
