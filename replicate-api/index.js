@@ -38,18 +38,36 @@ function resolveMaybeRelative(p) {
   return path.isAbsolute(p) ? p : path.resolve(__dirname, p);
 }
 
-// ✅ Lê o Service Account do Firebase pelo ARQUIVO
-function loadFirebaseServiceAccount() {
+// ✅ (Opcional) Lê o Service Account do Firebase pelo ARQUIVO (se existir)
+function loadFirebaseServiceAccountFromFile() {
   const filePathRaw = (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "").trim();
   if (!filePathRaw) return null;
 
   const filePath = resolveMaybeRelative(filePathRaw);
+
+  // ✅ não quebra se não existir
+  if (!fs.existsSync(filePath)) return null;
+
   const content = fs.readFileSync(filePath, "utf-8");
   return JSON.parse(content);
 }
 
+// ✅ (Opcional) Lê o Service Account do Firebase por JSON direto no ENV
+function loadFirebaseServiceAccountFromJsonEnv() {
+  const raw = (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 // =========================
-// ✅ Firebase init (sem quebrar)
+// ✅ Firebase init (Cloud Run friendly)
+// - 1) Se tiver FIREBASE_SERVICE_ACCOUNT_JSON -> usa
+// - 2) Se tiver FIREBASE_SERVICE_ACCOUNT_PATH e arquivo existir -> usa
+// - 3) Senão -> usa credenciais padrão do Cloud Run (ADC)
 // =========================
 let db = null;
 let FieldValue = null;
@@ -58,13 +76,18 @@ function ensureFirebase() {
   if (db && FieldValue) return true;
 
   try {
-    const sa = loadFirebaseServiceAccount();
-    if (!sa) return false;
-
     if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert(sa),
-      });
+      const saJson = loadFirebaseServiceAccountFromJsonEnv();
+      const saFile = loadFirebaseServiceAccountFromFile();
+
+      if (saJson) {
+        admin.initializeApp({ credential: admin.credential.cert(saJson) });
+      } else if (saFile) {
+        admin.initializeApp({ credential: admin.credential.cert(saFile) });
+      } else {
+        // ✅ Cloud Run: usa a Service Account do serviço
+        admin.initializeApp();
+      }
     }
 
     db = admin.firestore();
@@ -94,7 +117,9 @@ async function chargeCreditsOrFail({ uid, requestId, quality }) {
     }
 
     const userSnap = await tx.get(userRef);
-    const creditsNow = Number(userSnap.exists ? userSnap.data()?.credits ?? 0 : 0);
+    const creditsNow = Number(
+      userSnap.exists ? userSnap.data()?.credits ?? 0 : 0
+    );
 
     if (creditsNow < requiredCredits) {
       return { ok: false, insufficient: true, creditsNow, requiredCredits };
@@ -125,23 +150,24 @@ async function chargeCreditsOrFail({ uid, requestId, quality }) {
   return result;
 }
 
+// ✅ Health
 app.get("/health", (_req, res) => {
-  let firebaseOk = false;
-  try {
-    const sa = loadFirebaseServiceAccount();
-    firebaseOk = !!sa?.client_email;
-  } catch {
-    firebaseOk = false;
-  }
+  const port = Number(process.env.PORT || process.env.REPLICATE_PORT || 8080);
+
+  const hasSAJson = !!(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
+  const fileRaw = (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "").trim();
+  const fileResolved = fileRaw ? resolveMaybeRelative(fileRaw) : "";
+  const fileExists = fileResolved ? fs.existsSync(fileResolved) : false;
 
   return res.json({
     ok: true,
-    has_REPLICATE_API_TOKEN: !!process.env.REPLICATE_API_TOKEN,
-    has_GOOGLE_API_KEY: !!process.env.GOOGLE_API_KEY,
-    port: Number(process.env.REPLICATE_PORT || 5050),
+    has_REPLICATE_API_TOKEN: !!(process.env.REPLICATE_API_TOKEN || "").trim(),
+    has_GOOGLE_API_KEY: !!(process.env.GOOGLE_API_KEY || "").trim(),
+    port,
     model: (process.env.REPLICATE_MODEL || "black-forest-labs/flux-kontext-pro").trim(),
-    firebase_service_account_loaded: firebaseOk,
-    firebase_service_account_path: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || null,
+    firebase_mode: hasSAJson ? "ENV_JSON" : fileExists ? "FILE" : "CLOUD_RUN_DEFAULT",
+    firebase_file_path: fileRaw || null,
+    firebase_file_exists: fileExists,
   });
 });
 
@@ -209,22 +235,6 @@ async function extractImageUrl(anyOutput) {
 }
 
 // =========================
-// ✅ Helpers Gemini
-// =========================
-function parseDataUrl(dataUrl) {
-  const s = (dataUrl || "").toString().trim();
-  if (!s) return { mimeType: "image/jpeg", base64: "" };
-
-  if (s.startsWith("data:") && s.includes("base64,")) {
-    const mimeType = s.slice(5, s.indexOf(";")) || "image/jpeg";
-    const base64 = s.split("base64,")[1] || "";
-    return { mimeType, base64 };
-  }
-
-  return { mimeType: "image/jpeg", base64: s };
-}
-
-// =========================
 // ✅ ROTA HD (Replicate)
 // =========================
 app.post("/generate-image", async (req, res) => {
@@ -284,7 +294,7 @@ app.post("/generate-image", async (req, res) => {
       alreadyCharged: !!charge?.alreadyCharged,
       requiredCredits: charge?.requiredCredits ?? (quality === "4k" ? 4 : 1),
     });
-  } catch (err) {
+  } catch (_err) {
     return res.status(500).json({ error: "Erro ao gerar imagem" });
   }
 });
@@ -338,7 +348,13 @@ app.post("/generate-image-4k", async (req, res) => {
   }
 });
 
-const PORT = Number(process.env.REPLICATE_PORT || 5050);
+// =========================
+// ✅ START SERVER (CLOUD RUN)
+// Cloud Run manda a porta em process.env.PORT
+// Local você pode usar REPLICATE_PORT=5050 se quiser
+// =========================
+const PORT = Number(process.env.PORT || process.env.REPLICATE_PORT || 8080);
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log("✅ Replicate server ON na porta", PORT);
 });

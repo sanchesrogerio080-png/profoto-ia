@@ -1,12 +1,13 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY package.json ./
+
+COPY package*.json ./
 RUN npm install --omit=dev
 
-COPY index.js ./
+COPY . .
 
-ENV PORT=8080
-EXPOSE 8080
+ENV NODE_ENV=production
 
-CMD ["npm", "start"]
+# Cloud Run usa a variável PORT automaticamente
+CMD ["node", "index.js"]
