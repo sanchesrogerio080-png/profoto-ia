@@ -34,33 +34,11 @@ type Step = 1 | 2 | 3;
 // ✅ como o personagem vai interagir com o produto
 type UseMode = "wearing" | "holding" | "product_only";
 
-// ✅ Produto: preservar 100% + foto pro
-const PRODUCT_PROMPT_MASTER = `
-Use the EXACT same product from the uploaded photo.
-Do NOT change the product: design, shape, colors, logos, text, materials, textures.
-Only improve the PHOTO quality: clean professional lighting, sharp details, realistic shadows, true colors.
-`.trim();
-
-// ✅ Modo de uso (botões)
-const USEMODE_PROMPTS: Record<UseMode, string> = {
-  wearing: `
-The person is USING / WEARING the product naturally and correctly (real-life use).
-Do NOT hold the product in the hands.
-Face fully visible and sharp. Natural friendly smile.
-Product clearly visible and sharp.
-`.trim(),
-
-  holding: `
-The person is HOLDING the product in the hands at chest level, centered.
-Do NOT wear/use the product.
-Face fully visible and sharp. Natural friendly smile.
-Product clearly visible and sharp.
-`.trim(),
-
-  product_only: `
-Product only. No person visible.
-Centered hero shot. Sharp and clean professional product photo.
-`.trim(),
+// ✅ regras curtas de modo (sem texto gigante)
+const MODE_LINE: Record<UseMode, string> = {
+  wearing: "Person is wearing/using the product naturally (real-life use).",
+  holding: "Person is holding the product in hands at chest level, centered.",
+  product_only: "Product only. No person visible.",
 };
 
 const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }) => {
@@ -81,6 +59,7 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
   const fileInputGalleryRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
 
+  // ✅ Produção: Cloud Run via Vercel ENV
   const apiBaseUrlRaw =
     ((import.meta as any).env?.VITE_REPLICATE_API_BASE_URL as string | undefined)?.trim() ||
     ((import.meta as any).env?.VITE_LOCAL_GENERATE_URL as string | undefined)?.trim() ||
@@ -150,14 +129,6 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
       return;
     }
 
-    // ✅ BLOQUEIO DE CONFLITO: cenário que NÃO permite pessoa
-    if (useMode !== "product_only" && selectedScenario?.personAllowed === false) {
-      setError(
-        "Esse cenário é 'Foto do produto (fundo branco)' e NÃO permite pessoa. Troque o cenário ou escolha 'Só Produto'."
-      );
-      return;
-    }
-
     setIsGenerating(true);
     setError(null);
 
@@ -167,61 +138,63 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
       const base64Data = productImage.split(",")[1];
       const mimeType = productImage.split(";")[0].split(":")[1];
 
-      const qualityHint =
-        quality === "4k"
-          ? "4K ultra-realistic professional commercial photo. Very sharp details. Clean studio lighting."
-          : "Professional commercial photo. Sharp details. Clean lighting. True colors.";
-
+      // ✅ regras curtas por tipo (sem conflito)
       const framingRule =
         productType === "acessorio"
-          ? "Framing: chest-up if person is present, product clearly visible, not too far."
+          ? "Framing: chest-up if person is present. Product visible. Not too far."
           : productType === "bone"
-          ? "Framing: chest-up, face visible, hat/cap worn correctly (NOT covering eyes), product clearly visible, not too far."
+          ? "Framing: chest-up. Face visible. Hat/cap must NOT cover eyes/eyebrows. Product visible. Not too far."
           : productType === "calcado"
-          ? "Framing: show the shoes clearly and sharp, not too far."
+          ? "Framing: show shoes clearly. Not too far."
           : productType === "roupa"
-          ? "Framing: show clothing fit clearly, face visible, not too far."
-          : "Framing: close enough, product clearly visible, not too far.";
+          ? "Framing: show clothing fit clearly. Face visible. Not too far."
+          : "Framing: close enough. Product clearly visible. Not too far.";
 
-      const useModeRule =
+      const scenarioLine = (selectedScenario?.prompt || "").trim();
+      const characterLine =
         useMode === "product_only"
-          ? USEMODE_PROMPTS.product_only
-          : useMode === "holding"
-          ? USEMODE_PROMPTS.holding
-          : USEMODE_PROMPTS.wearing;
-
-      // ✅ personagem AGORA vem SÓ do constants.ts
-      const characterBlock =
-        useMode === "product_only"
-          ? "No person visible."
-          : (selectedCharacter?.prompt?.trim() ||
-              "Real person, friendly smile, face fully visible and sharp.");
+          ? ""
+          : (selectedCharacter?.prompt || "").trim();
 
       const userNotes = (userInstructions || "").trim();
 
-      const formatHint = `Match the selected format: ${selectedFormat?.name || "selected format"} aspect ratio and composition.`;
+      const qualityLine = quality === "4k" ? "4K ultra realistic." : "HD professional.";
 
+      // ✅ AQUI É O OURO: regra CRÍTICA antes de tudo
+      const criticalFaceRule =
+        useMode === "product_only"
+          ? ""
+          : `
+CRITICAL RULE (MUST FOLLOW):
+The person's FACE MUST be fully visible and sharp.
+NOTHING can cover the eyes or eyebrows (hair, hat, product, hands).
+If needed, adjust the hat/product position to reveal the full face.
+`.trim();
+
+      // ✅ fidelidade do produto (curta)
+      const productFidelity = `
+Product fidelity:
+Keep the exact same product from the uploaded photo.
+Do not change design, logo, text, colors, materials, proportions.
+`.trim();
+
+      // ✅ prompt final curto e direto
       const fullPrompt = `
-SCENE: ${selectedScenario.prompt}
+${scenarioLine}
 
-CHARACTER: ${characterBlock}
+${criticalFaceRule}
 
-USE MODE: ${useModeRule}
+${MODE_LINE[useMode]}
+${characterLine}
 
-PRODUCT: ${PRODUCT_PROMPT_MASTER}
+${productFidelity}
 
-PHOTO STYLE:
-Professional commercial product photography.
-Realistic lighting, sharp focus, true colors.
-No blur. Clean background. Realistic shadows.
-
+Photo style: professional commercial photography. Clean lighting. Sharp focus. True colors.
 ${framingRule}
+Aspect ratio: ${selectedFormat?.aspectRatio || "1:1"}.
+Quality: ${qualityLine}
 
-FORMAT: ${formatHint}
-
-QUALITY: ${qualityHint}
-
-USER NOTES: ${userNotes ? userNotes : "(none)"}
+${userNotes ? `User notes: ${userNotes}` : ""}
 `.trim();
 
       const resp = await fetch(`${apiBaseUrl}/generate-image`, {
