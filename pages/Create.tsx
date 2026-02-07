@@ -31,15 +31,8 @@ interface CreateProps {
 type QualityOption = "hd" | "4k";
 type Step = 1 | 2 | 3;
 
-// ✅ NOVO: como o personagem vai interagir com o produto
+// ✅ como o personagem vai interagir com o produto
 type UseMode = "wearing" | "holding" | "product_only";
-
-/**
- * ✅ PROMPTS NOVOS (BEM SIMPLES) — objetivo: parar conflito, melhorar qualidade, manter fidelidade do produto
- * - Sem texto gigante
- * - Sem lista enorme de "no..."
- * - Direto ao ponto
- */
 
 // ✅ Produto: preservar 100% + foto pro
 const PRODUCT_PROMPT_MASTER = `
@@ -70,79 +63,9 @@ Centered hero shot. Sharp and clean professional product photo.
 `.trim(),
 };
 
-// ✅ Avatares (select): simples e objetivos
-const AVATAR_PROMPTS: Record<string, string> = {
-  "Nenhum / Aleatório": `
-Real person, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Mulher Adulta": `
-Real adult woman, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Mulher Plus Size": `
-Real plus-size woman, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Homem Adulto": `
-Real adult man, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Homem Plus Size": `
-Real plus-size man, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Mulher Jovem": `
-Real young woman, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Homem Jovem": `
-Real young man, natural look, friendly smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Adolescente Homem": `
-Real teenage boy, natural look, gentle smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Adolescente Mulher": `
-Real teenage girl, natural look, gentle smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Criança Menina": `
-Real child girl, gentle smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Criança Menino": `
-Real child boy, gentle smile.
-Face fully visible and sharp.
-`.trim(),
-
-  "Bebê Menina": `
-Real baby girl, happy gentle expression.
-Face fully visible and sharp.
-`.trim(),
-
-  "Bebê Menino": `
-Real baby boy, happy gentle expression.
-Face fully visible and sharp.
-`.trim(),
-};
-
 const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }) => {
-  // ✅ passos (tela 1 / 2 / 3)
   const [step, setStep] = useState<Step>(1);
 
-  // ✅ sua lógica (mantida)
   const [productImage, setProductImage] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<Scenario>(SCENARIOS[0]);
   const [selectedCharacter, setSelectedCharacter] = useState<Character>(CHARACTERS[0]);
@@ -151,35 +74,19 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // UI extra (não mexe no fundamento)
-  const [productType, setProductType] = useState<string>(""); // só visual, mas agora entra no prompt como regra de enquadramento
-
-  // ✅ NOVO: instruções do textarea (PROMPT do usuário)
+  const [productType, setProductType] = useState<string>("");
   const [userInstructions, setUserInstructions] = useState<string>("");
-
-  // ✅ NOVO: modo de uso do produto
   const [useMode, setUseMode] = useState<UseMode>("wearing");
 
   const fileInputGalleryRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
 
-  /**
-   * ✅ CORREÇÃO DEFINITIVA:
-   * - Em PRODUÇÃO (profotoia.com.br / Vercel) NUNCA usar localhost.
-   * - Só usa Cloud Run via VITE_REPLICATE_API_BASE_URL.
-   * - Localhost só é permitido quando o site estiver rodando em "localhost" no navegador.
-   */
-  const cloudRunBase =
-    ((import.meta as any).env?.VITE_REPLICATE_API_BASE_URL as string | undefined)?.trim() || "";
+  const apiBaseUrlRaw =
+    ((import.meta as any).env?.VITE_REPLICATE_API_BASE_URL as string | undefined)?.trim() ||
+    ((import.meta as any).env?.VITE_LOCAL_GENERATE_URL as string | undefined)?.trim() ||
+    "";
 
-  const localBase =
-    ((import.meta as any).env?.VITE_LOCAL_GENERATE_URL as string | undefined)?.trim() || "";
-
-  const isBrowserLocalhost =
-    typeof window !== "undefined" && window.location && window.location.hostname === "localhost";
-
-  const apiBaseUrlRaw = cloudRunBase || (isBrowserLocalhost ? localBase : "");
-  const apiBaseUrl = apiBaseUrlRaw.replace(/\/+$/, ""); // remove "/" no final
+  const apiBaseUrl = apiBaseUrlRaw.replace(/\/+$/, "");
 
   const requiredCredits = useMemo(() => {
     return quality === "4k" ? 4 : 1;
@@ -224,7 +131,6 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
       return;
     }
 
-    // ✅ se não tiver base URL configurada, para aqui (evita cair em localhost)
     if (!apiBaseUrl) {
       setError(
         "API não configurada. Defina VITE_REPLICATE_API_BASE_URL no Vercel com a URL do Cloud Run (ex: https://replicate-api-xxxxx.southamerica-east1.run.app)."
@@ -244,6 +150,14 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
       return;
     }
 
+    // ✅ BLOQUEIO DE CONFLITO: cenário que NÃO permite pessoa
+    if (useMode !== "product_only" && selectedScenario?.personAllowed === false) {
+      setError(
+        "Esse cenário é 'Foto do produto (fundo branco)' e NÃO permite pessoa. Troque o cenário ou escolha 'Só Produto'."
+      );
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
 
@@ -258,19 +172,17 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
           ? "4K ultra-realistic professional commercial photo. Very sharp details. Clean studio lighting."
           : "Professional commercial photo. Sharp details. Clean lighting. True colors.";
 
-      // ✅ enquadramento por tipo (bem simples)
       const framingRule =
         productType === "acessorio"
           ? "Framing: chest-up if person is present, product clearly visible, not too far."
           : productType === "bone"
-          ? "Framing: chest-up, face visible, hat/cap worn correctly, product clearly visible, not too far."
+          ? "Framing: chest-up, face visible, hat/cap worn correctly (NOT covering eyes), product clearly visible, not too far."
           : productType === "calcado"
           ? "Framing: show the shoes clearly and sharp, not too far."
           : productType === "roupa"
           ? "Framing: show clothing fit clearly, face visible, not too far."
           : "Framing: close enough, product clearly visible, not too far.";
 
-      // ✅ modo de uso
       const useModeRule =
         useMode === "product_only"
           ? USEMODE_PROMPTS.product_only
@@ -278,23 +190,17 @@ const Create: React.FC<CreateProps> = ({ user, onImageGenerated, onCreditError }
           ? USEMODE_PROMPTS.holding
           : USEMODE_PROMPTS.wearing;
 
-      // ✅ personagem (se product_only, força sem pessoa)
+      // ✅ personagem AGORA vem SÓ do constants.ts
       const characterBlock =
         useMode === "product_only"
           ? "No person visible."
-          : (AVATAR_PROMPTS[selectedCharacter?.name] ||
-              selectedCharacter?.prompt ||
+          : (selectedCharacter?.prompt?.trim() ||
               "Real person, friendly smile, face fully visible and sharp.");
 
-      // ✅ instrução do usuário (textarea)
       const userNotes = (userInstructions || "").trim();
 
-      // ✅ formato (simples)
-      const formatHint = `Match the selected format: ${
-        selectedFormat?.name || "selected format"
-      } aspect ratio and composition.`;
+      const formatHint = `Match the selected format: ${selectedFormat?.name || "selected format"} aspect ratio and composition.`;
 
-      // ✅ PROMPT FINAL (SIMPLES, DIRETO)
       const fullPrompt = `
 SCENE: ${selectedScenario.prompt}
 
@@ -318,7 +224,6 @@ QUALITY: ${qualityHint}
 USER NOTES: ${userNotes ? userNotes : "(none)"}
 `.trim();
 
-      // ✅ agora chama o Cloud Run (apiBaseUrl) e NÃO localhost em produção
       const resp = await fetch(`${apiBaseUrl}/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -328,8 +233,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
           input_image: productImage,
           base64Data,
           mimeType,
-
-          // ✅ ESSENCIAL PARA DESCONTAR CRÉDITOS (mantido)
           uid: user.uid,
           requestId: crypto.randomUUID(),
         }),
@@ -360,7 +263,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
     }
   };
 
-  // UI helpers
   const creditsPill = (
     <div className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/80 flex items-center gap-2">
       <span className="text-yellow-300/90">🪙</span>
@@ -382,7 +284,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
     );
   };
 
-  // ✅ Bottom nav visual (igual o estilo do outro app)
   const BottomNav = () => (
     <div className="absolute bottom-0 left-0 right-0">
       <div className="h-20 bg-gradient-to-t from-[#070b16] via-[#070b16]/95 to-transparent" />
@@ -426,7 +327,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
           <div className="absolute -inset-6 rounded-[48px] blur-3xl opacity-40 bg-gradient-to-b from-indigo-600/30 via-blue-600/10 to-transparent pointer-events-none" />
 
           <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-gradient-to-b from-[#0b1224] via-[#0b1224] to-[#070b16] shadow-[0_30px_120px_rgba(0,0,0,0.6)]">
-            {/* Top */}
             <div className="px-5 pt-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-blue-500 flex items-center justify-center shadow">
@@ -440,14 +340,12 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
             <div className="px-6 pb-28">
               <ProgressBar />
 
-              {/* ERROR */}
               {error ? (
                 <div className="mt-4 rounded-2xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-red-200 text-sm">
                   {error}
                 </div>
               ) : null}
 
-              {/* STEP 1 */}
               {step === 1 && (
                 <div className="mt-6">
                   <div className="text-white font-black text-lg">
@@ -520,7 +418,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                 </div>
               )}
 
-              {/* STEP 2 */}
               {step === 2 && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between">
@@ -563,7 +460,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                     </select>
                   </div>
 
-                  {/* ✅ NOVO: OPÇÃO "USANDO" vs "MOSTRANDO" */}
                   <div className="mt-5">
                     <div className="text-white/60 text-xs font-bold tracking-wide mb-2">
                       COMO O PERSONAGEM VAI APARECER
@@ -636,9 +532,7 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                                 {fmt.name}
                               </div>
                               <div className="text-white/40 text-xs mt-1">
-                                {fmt.ratio ? `${fmt.ratio} • ` : ""}
-                                {fmt.size ? `${fmt.size} • ` : ""}
-                                {fmt.label ? fmt.label : ""}
+                                {fmt.aspectRatio ? `${fmt.aspectRatio} • ` : ""}
                               </div>
                             </div>
 
@@ -704,7 +598,6 @@ USER NOTES: ${userNotes ? userNotes : "(none)"}
                 </div>
               )}
 
-              {/* STEP 3 */}
               {step === 3 && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between">
